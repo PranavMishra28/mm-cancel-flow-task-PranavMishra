@@ -316,13 +316,88 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
                 )
 			case 'J2':
 				return (
-					<J2Feedback
-						foundViaUs={!!state.found_via_migratemate}
-						onNext={async ({ visa, freeform }) => {
-							await save({ visa_type: visa ?? null, freeform_feedback: freeform ?? null })
-							dispatch({ type: 'GO', step: 'J3' })
-						}}
-					/>
+					<div className="mx-auto w-full max-w-[1040px]">
+						<div className="rounded-2xl bg-white shadow-xl ring-1 ring-black/5">
+							<div className="p-4 md:p-6">
+								{/* Header bar */}
+								<div className="flex items-center justify-between h-12 px-2 md:px-2 border-b border-gray-200">
+									{/* Left: Back button */}
+									<button
+										onClick={() => dispatch({ type: 'GO', step: 'J1' })}
+										className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900"
+									>
+										<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+										</svg>
+										Back
+									</button>
+									
+									{/* Center: title + step + dots */}
+									<div className="flex items-center">
+										<span className="text-sm font-medium text-gray-900">Subscription Cancellation</span>
+										<span className="ml-2 text-sm text-gray-500">Step 2 of 3</span>
+										<div className="ml-3 flex items-center gap-1">
+											<div className="h-2.5 w-2.5 rounded-full bg-blue-500"></div>
+											<div className="h-2.5 w-2.5 rounded-full bg-blue-500"></div>
+											<div className="h-2.5 w-2.5 rounded-full bg-gray-300"></div>
+										</div>
+									</div>
+									
+									{/* Right: Close button */}
+									<button
+										onClick={onClose}
+										className="text-gray-600 hover:text-gray-900"
+										aria-label="Close"
+									>
+										<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+										</svg>
+									</button>
+								</div>
+								
+								{/* Content grid */}
+								<div className="mt-6 grid md:grid-cols-[minmax(0,1fr)_minmax(0,480px)] gap-6 md:gap-8 items-stretch">
+									{/* Left column (form) */}
+									<div className="flex flex-col">
+										<J2Feedback
+											foundViaUs={!!state.found_via_migratemate}
+											onNext={async ({ visa, freeform }) => {
+												try {
+													await save({ visa_type: visa ?? null, freeform_feedback: freeform ?? null })
+													dispatch({ type: 'GO', step: 'J3' })
+												} catch (err) {
+													console.error('Save error:', err)
+													// Continue to next step even if save fails
+													dispatch({ type: 'GO', step: 'J3' })
+												}
+											}}
+											onBack={() => dispatch({ type: 'GO', step: 'J1' })}
+										/>
+									</div>
+									
+									{/* Right column (image) - hidden on mobile */}
+									<div className="hidden md:block md:pl-2">
+										<img 
+											src="/images/empire-state-compressed.jpg" 
+											alt="City skyline" 
+											className="w-full h-[360px] md:h-[420px] object-cover rounded-2xl"
+											onError={(e) => console.error('Image failed to load:', e)} 
+										/>
+									</div>
+									
+									{/* Mobile image - shown on mobile, hidden on desktop */}
+									<div className="block md:hidden">
+										<img 
+											src="/images/empire-state-compressed.jpg" 
+											alt="City skyline" 
+											className="w-full h-[360px] object-cover rounded-2xl"
+											onError={(e) => console.error('Image failed to load:', e)} 
+										/>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
 				)
 			case 'J3':
 				return (

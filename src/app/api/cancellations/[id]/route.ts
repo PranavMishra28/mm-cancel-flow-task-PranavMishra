@@ -9,9 +9,9 @@ export async function PATCH(
 	req: Request,
 	{ params }: { params: { id: string } },
 ) {
-	getOrSetCsrfToken()
+	await getOrSetCsrfToken()
 	try {
-		requireCsrf()
+		await requireCsrf()
 	} catch (e: any) {
 		return NextResponse.json({ error: e.message }, { status: e.status ?? 403 })
 	}
@@ -59,17 +59,17 @@ export async function PATCH(
 				.update(update)
 				.eq('id', cancellationId)
 			if (upErr) {
-				logError('patch update failed', { cancellation_id: cancellationId, user_id: userId, error: upErr.message })
+				await logError('patch update failed', { cancellation_id: cancellationId, user_id: userId, error: upErr.message })
 				return NextResponse.json({ error: 'Update failed' }, { status: 500 })
 			}
 		} else {
 			db.updateCancellation(cancellationId, update)
 		}
 
-		logInfo('patch updated cancellation', { cancellation_id: cancellationId, user_id: userId })
+		await logInfo('patch updated cancellation', { cancellation_id: cancellationId, user_id: userId })
 		return NextResponse.json({ ok: true })
 	} catch (err: any) {
-		logError('patch payload invalid', { error: err?.message })
+		await logError('patch payload invalid', { error: err?.message })
 		return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
 	}
 }

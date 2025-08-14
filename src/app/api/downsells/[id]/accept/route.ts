@@ -9,9 +9,9 @@ export async function POST(
 	req: Request,
 	{ params }: { params: { id: string } },
 ) {
-	getOrSetCsrfToken()
+	await getOrSetCsrfToken()
 	try {
-		requireCsrf()
+		await requireCsrf()
 	} catch (e: any) {
 		return NextResponse.json({ error: e.message }, { status: e.status ?? 403 })
 	}
@@ -44,17 +44,17 @@ export async function POST(
 				.update({ accepted_downsell: true })
 				.eq('id', cancellationId)
 			if (upErr) {
-				logError('downsells.accept: update failed', { cancellation_id: cancellationId, user_id: userId, error: upErr.message })
+				await logError('downsells.accept: update failed', { cancellation_id: cancellationId, user_id: userId, error: upErr.message })
 				return NextResponse.json({ error: 'Failed to accept offer' }, { status: 500 })
 			}
 		} else {
 			db.updateCancellation(cancellationId, { accepted_downsell: true })
 		}
 
-		logInfo('downsells.accept: success', { cancellation_id: cancellationId, user_id: userId })
+		await logInfo('downsells.accept: success', { cancellation_id: cancellationId, user_id: userId })
 		return NextResponse.json({ ok: true })
 	} catch (err: any) {
-		logError('downsells.accept: invalid request', { error: err?.message })
+		await logError('downsells.accept: invalid request', { error: err?.message })
 		return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
 	}
 }

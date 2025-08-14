@@ -9,9 +9,9 @@ export async function POST(
 	req: Request,
 	{ params }: { params: { id: string } },
 ) {
-	getOrSetCsrfToken()
+	await getOrSetCsrfToken()
 	try {
-		requireCsrf()
+		await requireCsrf()
 	} catch (e: any) {
 		return NextResponse.json({ error: e.message }, { status: e.status ?? 403 })
 	}
@@ -47,7 +47,7 @@ export async function POST(
 				.update({ status: 'pending_cancellation' })
 				.eq('id', record.subscription_id)
 			if (subErr) {
-				logError('complete: subscription update failed', { cancellation_id: cancellationId, user_id: userId, error: subErr.message })
+				await logError('complete: subscription update failed', { cancellation_id: cancellationId, user_id: userId, error: subErr.message })
 				return NextResponse.json({ error: 'Failed to update subscription' }, { status: 500 })
 			}
 
@@ -56,7 +56,7 @@ export async function POST(
 				.update({ status: 'completed' })
 				.eq('id', cancellationId)
 			if (canErr) {
-				logError('complete: cancellation update failed', { cancellation_id: cancellationId, user_id: userId, error: canErr.message })
+				await logError('complete: cancellation update failed', { cancellation_id: cancellationId, user_id: userId, error: canErr.message })
 				return NextResponse.json({ error: 'Failed to complete cancellation' }, { status: 500 })
 			}
 		} else {
@@ -64,10 +64,10 @@ export async function POST(
 			db.updateCancellation(cancellationId, { status: 'completed' })
 		}
 
-		logInfo('complete: success', { cancellation_id: cancellationId, user_id: userId })
+		await logInfo('complete: success', { cancellation_id: cancellationId, user_id: userId })
 		return NextResponse.json({ ok: true })
 	} catch (err: any) {
-		logError('complete: invalid request', { error: err?.message })
+		await logError('complete: invalid request', { error: err?.message })
 		return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
 	}
 }
