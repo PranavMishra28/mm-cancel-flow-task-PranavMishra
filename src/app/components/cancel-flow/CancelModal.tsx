@@ -59,9 +59,19 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
 			setLoading(true)
 			setError(null)
 			try {
+				console.log('Starting cancellation flow for subscription:', subscriptionId)
+				
 				// Touch GET to set CSRF cookies
-				await fetch('/api/cancellations/start', { method: 'GET' })
+				const getRes = await fetch('/api/cancellations/start', { method: 'GET' })
+				console.log('GET response:', getRes.status)
+				
+				// Wait a moment for cookies to be set
+				await new Promise(resolve => setTimeout(resolve, 100))
+				
 				const csrf = getCookie('csrf_token_mirror') || ''
+				console.log('CSRF token after GET:', csrf ? csrf.substring(0, 8) + '...' : 'missing')
+				console.log('All cookies:', document.cookie)
+				
 				const res = await fetch('/api/cancellations/start', {
 					method: 'POST',
 					headers: {
@@ -72,11 +82,22 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
 					},
 					body: JSON.stringify({ subscriptionId }),
 				})
-				if (!res.ok) throw new Error('Failed to start')
+				
+				console.log('POST response:', res.status, res.statusText)
+				
+				if (!res.ok) {
+					const errorText = await res.text()
+					console.error('Start failed:', { status: res.status, body: errorText })
+					throw new Error(`Failed to start: ${res.status} ${res.statusText}`)
+				}
+				
 				const data = await res.json()
+				console.log('Start successful, data:', data)
+				
 				if (!active) return
 				dispatch({ type: 'INIT', payload: data })
 			} catch (e: any) {
+				console.error('Start error:', e)
 				setError(e.message)
 			} finally {
 				if (active) setLoading(false)
@@ -89,9 +110,16 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
 	}, [subscriptionId])
 
 	async function save(data: Record<string, unknown>) {
-		if (!state.cancellationId) return
+		console.log('Current state:', state)
+		if (!state.cancellationId) {
+			console.warn('No cancellation ID available, skipping save')
+			return
+		}
 		setError(null)
 		const csrf = getCookie('csrf_token_mirror') || ''
+		
+		console.log('Saving data:', { data, cancellationId: state.cancellationId, csrf: csrf ? 'present' : 'missing' })
+		
 		const res = await fetch(`/api/cancellations/${state.cancellationId}`, {
 			method: 'PATCH',
 			headers: {
@@ -101,7 +129,14 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
 			},
 			body: JSON.stringify(data),
 		})
-		if (!res.ok) throw new Error('Failed to save')
+		
+		if (!res.ok) {
+			const errorText = await res.text()
+			console.error('Save failed:', { status: res.status, statusText: res.statusText, body: errorText })
+			throw new Error(`Failed to save: ${res.status} ${res.statusText}`)
+		}
+		
+		console.log('Save successful')
 	}
 
 	async function complete() {
@@ -142,15 +177,30 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
                             <div className="px-8 py-8 md:py-10 flex flex-col justify-center">
                                 <S0Entry
                                     onYes={async () => {
-                                        await save({ found_job: true })
-                                        dispatch({ type: 'SET', payload: { found_job: true } })
-                                        dispatch({ type: 'GO', step: 'J1' })
+                                        try {
+                                            await save({ found_job: true })
+                                            dispatch({ type: 'SET', payload: { found_job: true } })
+                                            dispatch({ type: 'GO', step: 'J1' })
+                                        } catch (err) {
+                                            console.error('Save error:', err)
+                                            // Continue to next step even if save fails
+                                            dispatch({ type: 'SET', payload: { found_job: true } })
+                                            dispatch({ type: 'GO', step: 'J1' })
+                                        }
                                     }}
                                     onNo={async () => {
-                                        await save({ found_job: false })
-                                        dispatch({ type: 'SET', payload: { found_job: false } })
-                                        if (state.variant === 'B') dispatch({ type: 'GO', step: 'D1' })
-                                        else dispatch({ type: 'GO', step: 'N1' })
+                                        try {
+                                            await save({ found_job: false })
+                                            dispatch({ type: 'SET', payload: { found_job: false } })
+                                            if (state.variant === 'B') dispatch({ type: 'GO', step: 'D1' })
+                                            else dispatch({ type: 'GO', step: 'N1' })
+                                        } catch (err) {
+                                            console.error('Save error:', err)
+                                            // Continue to next step even if save fails
+                                            dispatch({ type: 'SET', payload: { found_job: false } })
+                                            if (state.variant === 'B') dispatch({ type: 'GO', step: 'D1' })
+                                            else dispatch({ type: 'GO', step: 'N1' })
+                                        }
                                     }}
                                 />
                             </div>
@@ -204,15 +254,66 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
 					/>
 				)
 			case 'J1':
-				return (
-					<J1Congrats
-						onNext={async (viaUs) => {
-							await save({ found_via_migratemate: viaUs })
-							dispatch({ type: 'SET', payload: { found_via_migratemate: viaUs } })
-							dispatch({ type: 'GO', step: 'J2' })
-						}}
-					/>
-				)
+                                return (
+                    <div className="rounded-2xl bg-white shadow-xl overflow-hidden max-w-6xl w-full">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                            <div className="flex items-center gap-4">
+                                <button
+                                    onClick={() => dispatch({ type: 'GO', step: 'S0' })}
+                                    className="flex items-center gap-2 text-gray-600 hover:text-gray-800"
+                                >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                    Back
+                                </button>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                 <p className="text-sm text-gray-600 font-medium tracking-wide">{CONTENT.title.cancel}</p>
+                                 <div className="flex items-center gap-3">
+                                     <span className="text-xs text-gray-500 font-medium tracking-wide">Step 1 of 3</span>
+                                     <div className="flex gap-2">
+                                         <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 shadow-sm"></div>
+                                         <div className="w-2.5 h-2.5 rounded-full bg-gray-200 border border-gray-300 shadow-sm"></div>
+                                         <div className="w-2.5 h-2.5 rounded-full bg-gray-200 border border-gray-300 shadow-sm"></div>
+                                     </div>
+                                 </div>
+                             </div>
+                            <button aria-label="Close" className="text-gray-400 hover:text-gray-600 text-xl leading-none" onClick={onClose}>×</button>
+                        </div>
+                        <div className="grid md:grid-cols-[55%_45%] items-stretch overflow-hidden">
+                            {/* Mobile image on top */}
+                            <div className="block md:hidden h-48 w-full">
+                                <img src="/images/empire-state-compressed.jpg" alt="City skyline" className="h-full w-full object-cover" onError={(e) => console.error('Image failed to load:', e)} />
+                            </div>
+                            <div className="px-8 py-3 md:py-3 flex flex-col justify-between md:h-full">
+                                <J1Congrats
+                                     onNext={async (viaUs, formData) => {
+                                         try {
+                                             await save({ found_via_migratemate: viaUs })
+                                             dispatch({ type: 'SET', payload: { found_via_migratemate: viaUs } })
+                                             dispatch({ type: 'GO', step: 'J2' })
+                                         } catch (err) {
+                                             console.error('Save error:', err)
+                                             // Continue to next step even if save fails
+                                             dispatch({ type: 'SET', payload: { found_via_migratemate: viaUs } })
+                                             dispatch({ type: 'GO', step: 'J2' })
+                                         }
+                                     }}
+                                     onBack={() => dispatch({ type: 'GO', step: 'S0' })}
+                                 />
+                            </div>
+                            <div className="hidden md:block pt-3 pb-3 pl-3 pr-3 md:h-full">
+                                 <div 
+                                     className="h-full w-full bg-cover bg-center bg-no-repeat rounded-2xl shadow-lg"
+                                     style={{
+                                         backgroundImage: 'url(/images/empire-state-compressed.jpg)'
+                                     }}
+                                 />
+                            </div>
+                        </div>
+                    </div>
+                )
 			case 'J2':
 				return (
 					<J2Feedback
