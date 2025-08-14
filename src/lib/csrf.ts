@@ -5,8 +5,8 @@ const CSRF_COOKIE = 'csrf_token'
 const CSRF_COOKIE_MIRROR = 'csrf_token_mirror'
 const CSRF_HEADER = 'x-csrf-token'
 
-export function getOrSetCsrfToken(): string {
-	const store = cookies()
+export async function getOrSetCsrfToken(): Promise<string> {
+	const store = await cookies()
 	const existing = store.get(CSRF_COOKIE)?.value
 	if (existing) {
 		// Ensure mirror exists too
@@ -34,9 +34,9 @@ export function getOrSetCsrfToken(): string {
 	return token
 }
 
-export function requireCsrf(): void {
-	const store = cookies()
-	const hdrs = headers()
+export async function requireCsrf(): Promise<void> {
+	const store = await cookies()
+	const hdrs = await headers()
 	const cookieToken = store.get(CSRF_COOKIE)?.value
 	const headerToken = hdrs.get(CSRF_HEADER)
 	if (!cookieToken || !headerToken || cookieToken !== headerToken) {

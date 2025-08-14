@@ -8,15 +8,15 @@ import { StartRequestSchema, Variant } from '@/lib/validation'
 
 export async function GET() {
 	// Establish CSRF cookies for client to mirror
-	getOrSetCsrfToken()
+	await getOrSetCsrfToken()
 	return new NextResponse(null, { status: 204 })
 }
 
 export async function POST(req: Request) {
 	// Ensure CSRF cookie exists for clients to mirror header
-	getOrSetCsrfToken()
+	await getOrSetCsrfToken()
 	try {
-		requireCsrf()
+		await requireCsrf()
 	} catch (e: any) {
 		return NextResponse.json({ error: e.message }, { status: e.status ?? 403 })
 	}
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
 				.limit(1)
 				.maybeSingle()
 			if (existingErr) {
-				logError('cancellations lookup failed', { subscription_id: parsed.subscriptionId, user_id: userId, error: existingErr.message })
+				await logError('cancellations lookup failed', { subscription_id: parsed.subscriptionId, user_id: userId, error: existingErr.message })
 			}
 			existing = data
 		} else {
@@ -67,7 +67,7 @@ export async function POST(req: Request) {
 		}
 
 		if (existing && existing.status === 'in_progress') {
-			logInfo('start resumed existing cancellation', { cancellation_id: existing.id, subscription_id: parsed.subscriptionId, user_id: userId, variant: existing.downsell_variant })
+			await logInfo('start resumed existing cancellation', { cancellation_id: existing.id, subscription_id: parsed.subscriptionId, user_id: userId, variant: existing.downsell_variant })
 			return NextResponse.json({ cancellationId: existing.id, variant: existing.downsell_variant as Variant, planPriceCents: subscription.monthly_price })
 		}
 
@@ -88,7 +88,7 @@ export async function POST(req: Request) {
 				.select('id')
 				.single()
 			if (insertErr || !data) {
-				logError('failed to create cancellation', { subscription_id: parsed.subscriptionId, user_id: userId, error: insertErr?.message })
+				await logError('failed to create cancellation', { subscription_id: parsed.subscriptionId, user_id: userId, error: insertErr?.message })
 				return NextResponse.json({ error: 'Failed to start cancellation' }, { status: 500 })
 			}
 			created = data
@@ -96,10 +96,10 @@ export async function POST(req: Request) {
 			created = db.createCancellation(userId, parsed.subscriptionId, variant)
 		}
 
-		logInfo('start created new cancellation', { cancellation_id: created.id, subscription_id: parsed.subscriptionId, user_id: userId, variant })
+		await logInfo('start created new cancellation', { cancellation_id: created.id, subscription_id: parsed.subscriptionId, user_id: userId, variant })
 		return NextResponse.json({ cancellationId: created.id, variant, planPriceCents: subscription.monthly_price })
 	} catch (err: any) {
-		logError('start failed', { error: err?.message })
+		await logError('start failed', { error: err?.message })
 		return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
 	}
 }

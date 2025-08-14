@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useReducer, useState } from 'react'
+import { useEffect, useReducer, useState } from 'react'
 import S0Entry from './steps/S0Entry'
 import J1Congrats from './steps/J1Congrats'
 import J2Feedback from './steps/J2Feedback'
@@ -9,6 +9,7 @@ import D1Downsell from './steps/D1Downsell'
 import N1Improve from './steps/N1Improve'
 import N2MainReason from './steps/N2MainReason'
 import N3Done from './steps/N3Done'
+import Modal from '@/components/Modal'
 
 type Variant = 'A' | 'B'
 type StepId = 'S0' | 'J1' | 'J2' | 'J3' | 'D1' | 'N1' | 'N2' | 'N3'
@@ -41,17 +42,10 @@ function reducer(state: CancelState, action: Action): CancelState {
 }
 
 const CONTENT = {
-	title: {
-		cancel: 'Cancel subscription',
-		congrats: 'Congrats on the new role!'
-	},
-	cta: {
-		next: 'Next',
-		back: 'Back',
-		accept_discount: 'Get the discount',
-		no_thanks: 'No thanks',
-		return_profile: 'Return to Profile',
-	},
+    title: {
+        cancel: 'Subscription Cancellation',
+        congrats: 'Congrats on the new role!'
+    },
 }
 
 export function CancelModal({ subscriptionId, onClose }: { subscriptionId: string; onClose: () => void }) {
@@ -130,24 +124,47 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
 		if (!res.ok) throw new Error('Failed to accept offer')
 	}
 
-	const stepEl = (() => {
-		if (loading) return <p>Loading…</p>
-		switch (state.step) {
-			case 'S0':
-				return (
-					<S0Entry
-						onNext={async (foundJob) => {
-							await save({ found_job: foundJob })
-							dispatch({ type: 'SET', payload: { found_job: foundJob } })
-							if (foundJob) {
-								dispatch({ type: 'GO', step: 'J1' })
-								return
-							}
-							if (state.variant === 'B') dispatch({ type: 'GO', step: 'D1' })
-							else dispatch({ type: 'GO', step: 'N1' })
-						}}
-					/>
-				)
+    const stepEl = (() => {
+        if (loading) return <p>Loading…</p>
+        switch (state.step) {
+            case 'S0':
+                return (
+                    <div className="rounded-2xl bg-white shadow-xl overflow-hidden max-w-4xl w-full">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                            <p className="text-sm text-gray-600 font-medium">{CONTENT.title.cancel}</p>
+                            <button aria-label="Close" className="text-gray-400 hover:text-gray-600 text-xl leading-none" onClick={onClose}>×</button>
+                        </div>
+                        <div className="grid md:grid-cols-2 overflow-hidden min-h-[400px]">
+                            {/* Mobile image on top */}
+                            <div className="block md:hidden h-48 w-full">
+                                <img src="/images/empire-state-compressed.jpg" alt="City skyline" className="h-full w-full object-cover" onError={(e) => console.error('Image failed to load:', e)} />
+                            </div>
+                            <div className="px-8 py-8 md:py-10 flex flex-col justify-center">
+                                <S0Entry
+                                    onYes={async () => {
+                                        await save({ found_job: true })
+                                        dispatch({ type: 'SET', payload: { found_job: true } })
+                                        dispatch({ type: 'GO', step: 'J1' })
+                                    }}
+                                    onNo={async () => {
+                                        await save({ found_job: false })
+                                        dispatch({ type: 'SET', payload: { found_job: false } })
+                                        if (state.variant === 'B') dispatch({ type: 'GO', step: 'D1' })
+                                        else dispatch({ type: 'GO', step: 'N1' })
+                                    }}
+                                />
+                            </div>
+                            <div className="hidden md:block p-4">
+                                <div 
+                                    className="h-full w-full bg-cover bg-center bg-no-repeat rounded-2xl shadow-lg min-h-[400px]"
+                                    style={{
+                                        backgroundImage: 'url(/images/empire-state-compressed.jpg)'
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )
 			case 'D1':
 				return (
 					<D1Downsell
@@ -218,20 +235,16 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
 		}
 	})()
 
-	return (
-		<div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-			<div className="bg-white rounded-2xl w-full max-w-[680px] p-4 md:p-6">
-				<div className="text-xs md:text-sm text-muted-foreground mb-3">
-					Step {stepIndex(state.step, state.variant)} of {totalSteps(state)}
-				</div>
-				{error && <p className="text-red-600 text-sm" role="alert">{error}</p>}
-				{stepEl}
-				<div className="mt-4 flex justify-end gap-2">
-					<button className="text-sm underline" onClick={onClose}>Close</button>
-				</div>
-			</div>
-		</div>
-	)
+    return (
+        <Modal open={true} onClose={onClose} label={CONTENT.title.cancel}>
+            {error && (
+                <div className="mb-2">
+                    <p className="text-red-600 text-sm" role="alert">{error}</p>
+                </div>
+            )}
+            {stepEl}
+        </Modal>
+    )
 }
 
 function stepIndex(step: StepId, variant?: Variant): number {
