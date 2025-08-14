@@ -13,10 +13,13 @@ import N1Improve from './steps/N1Improve'
 import N2MainReason from './steps/N2MainReason'
 import N3Done from './steps/N3Done'
 import CompletionModal from './steps/CompletionModal'
+import StillLookingOffer from './steps/StillLooking_Offer'
+import StillLookingOfferAccepted from './steps/StillLooking_OfferAccepted'
+import StillLookingRolesPreview from './steps/StillLooking_RolesPreview'
 import Modal from '@/components/Modal'
 
 type Variant = 'A' | 'B'
-type StepId = 'S0' | 'J1' | 'J2' | 'J3' | 'J3_LAWYER_YES' | 'YES_COMPLETION_VISA_HELP' | 'D1' | 'N1' | 'N2' | 'N3' | 'COMPLETED'
+type StepId = 'S0' | 'J1' | 'J2' | 'J3' | 'J3_LAWYER_YES' | 'YES_COMPLETION_VISA_HELP' | 'D1' | 'N1' | 'N2' | 'N3' | 'COMPLETED' | 'STILL_LOOKING_OFFER' | 'STILL_LOOKING_OFFER_ACCEPTED' | 'STILL_LOOKING_ROLES_PREVIEW'
 
 type CancelState = {
 	step: StepId
@@ -165,7 +168,7 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
 		console.log('Data to save:', data)
 		
 		if (!state.cancellationId) {
-			console.error('CRITICAL: No cancellation ID available, cannot save!')
+			console.log('NOTICE: No cancellation ID available, cannot save!')
 			console.log('Full state details:', state)
 			console.log('This suggests the /start API call failed or didn\'t complete properly')
 			console.log('Continuing without save to allow user to complete the flow')
@@ -215,7 +218,7 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
 			
 			if (!res.ok) {
 				const errorText = await res.text()
-				console.error('Save failed:', { 
+				console.log('Save API returned non-ok status:', { 
 					status: res.status, 
 					statusText: res.statusText, 
 					body: errorText,
@@ -229,7 +232,28 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
 			console.log('Save successful, response:', responseData)
 			console.log('=== SAVE FUNCTION END (SUCCESS) ===')
 		} catch (fetchError) {
-			console.error('Save failed:', fetchError)
+			// Better error logging that handles different error types
+			console.log('Save failed - network or fetch error occurred')
+			console.log('Error details:', {
+				message: fetchError?.message || 'No error message',
+				name: fetchError?.name || 'Unknown error type',
+				stack: fetchError?.stack || 'No stack trace available',
+				type: typeof fetchError,
+				toString: fetchError?.toString?.() || 'Cannot convert to string',
+				cancellationId: state.cancellationId,
+				url: `/api/cancellations/${state.cancellationId}`,
+				isNetworkError: fetchError?.name === 'TypeError' && fetchError?.message?.includes('fetch')
+			})
+			
+			// Try to get more specific error info
+			if (fetchError instanceof TypeError) {
+				console.log('Network error - likely connection issue or CORS problem')
+			} else if (fetchError instanceof Error) {
+				console.log('Standard error:', fetchError.message)
+			} else {
+				console.log('Unknown error type:', fetchError)
+			}
+			
 			console.log('=== SAVE FUNCTION END (ERROR) ===')
 			console.log('Continuing gracefully - not throwing error to avoid breaking user flow')
 			// Don't throw - allow the flow to continue for better UX
@@ -319,8 +343,7 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
                                         // Save function now handles errors gracefully and doesn't throw
                                         await save({ found_job: false })
                                         dispatch({ type: 'SET', payload: { found_job: false } })
-                                        if (state.variant === 'B') dispatch({ type: 'GO', step: 'D1' })
-                                        else dispatch({ type: 'GO', step: 'N1' })
+                                        dispatch({ type: 'GO', step: 'STILL_LOOKING_OFFER' })
                                     }}
                                 />
                             </div>
@@ -641,6 +664,40 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
 				return (
 					<YesCompletion_VisaHelp
 						onFinish={onClose}
+						onClose={onClose}
+					/>
+				)
+			case 'STILL_LOOKING_OFFER':
+				return (
+					<StillLookingOffer
+						onAccept={async () => {
+							// Save the downsell acceptance (stub for now)
+							await save({ downsell_offered: true, downsell_accepted: true })
+							dispatch({ type: 'GO', step: 'STILL_LOOKING_OFFER_ACCEPTED' })
+						}}
+						onDecline={async () => {
+							// TODO: Implement "No thanks" logic later
+							// For now, just save that they declined
+							await save({ downsell_offered: true, downsell_accepted: false })
+							// Could route to existing N1 flow or close
+						}}
+						onBack={() => dispatch({ type: 'GO', step: 'S0' })}
+						onClose={onClose}
+					/>
+				)
+			case 'STILL_LOOKING_OFFER_ACCEPTED':
+				return (
+					<StillLookingOfferAccepted
+						onContinue={() => {
+							dispatch({ type: 'GO', step: 'STILL_LOOKING_ROLES_PREVIEW' })
+						}}
+						onBack={() => dispatch({ type: 'GO', step: 'STILL_LOOKING_OFFER' })}
+						onClose={onClose}
+					/>
+				)
+			case 'STILL_LOOKING_ROLES_PREVIEW':
+				return (
+					<StillLookingRolesPreview
 						onClose={onClose}
 					/>
 				)
