@@ -21,6 +21,7 @@ export type Cancellation = {
 	freeform_feedback?: string | null
 	reason_key?: string | null
 	willing_to_pay_cents?: number | null
+	employer_immigration_support?: 'yes' | 'no' | null
 	created_at: string
 }
 

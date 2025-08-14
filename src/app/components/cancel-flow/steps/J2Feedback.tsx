@@ -4,7 +4,7 @@ import { useState } from 'react'
 
 interface J2FeedbackProps {
 	foundViaUs: boolean
-	onNext: (payload: { visa?: string; freeform?: string }) => void
+	onNext: (payload: { freeform?: string }) => void
 	onBack: () => void
 }
 

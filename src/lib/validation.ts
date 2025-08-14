@@ -44,6 +44,7 @@ export const PatchRequestSchema = z
 			.nullable()
 			.optional(),
 		reason_key: ReasonKeySchema.optional(),
+		employer_immigration_support: z.enum(['yes', 'no']).optional(),
 		// Client may send dollars; server stores cents
 		willing_to_pay_dollars: z
 			.number()

@@ -9,10 +9,11 @@ import D1Downsell from './steps/D1Downsell'
 import N1Improve from './steps/N1Improve'
 import N2MainReason from './steps/N2MainReason'
 import N3Done from './steps/N3Done'
+import CompletionModal from './steps/CompletionModal'
 import Modal from '@/components/Modal'
 
 type Variant = 'A' | 'B'
-type StepId = 'S0' | 'J1' | 'J2' | 'J3' | 'D1' | 'N1' | 'N2' | 'N3'
+type StepId = 'S0' | 'J1' | 'J2' | 'J3' | 'D1' | 'N1' | 'N2' | 'N3' | 'COMPLETED'
 
 type CancelState = {
 	step: StepId
@@ -21,6 +22,8 @@ type CancelState = {
 	planPriceCents?: number
 	found_job?: boolean
 	found_via_migratemate?: boolean
+	employer_immigration_support?: 'yes' | 'no'
+	visa_type?: string
 }
 
 type Action =
@@ -29,14 +32,24 @@ type Action =
 	| { type: 'SET'; payload: Partial<CancelState> }
 
 function reducer(state: CancelState, action: Action): CancelState {
+	console.log('Reducer called with:', { action, currentState: state })
+	
+	let newState: CancelState
 	switch (action.type) {
 		case 'INIT':
-			return { ...state, ...action.payload, step: 'S0' }
+			newState = { ...state, ...action.payload, step: 'S0' }
+			console.log('INIT action - new state:', newState)
+			return newState
 		case 'GO':
-			return { ...state, step: action.step }
+			newState = { ...state, step: action.step }
+			console.log('GO action - new state:', newState)
+			return newState
 		case 'SET':
-			return { ...state, ...action.payload }
+			newState = { ...state, ...action.payload }
+			console.log('SET action - new state:', newState)
+			return newState
 		default:
+			console.log('Unknown action type, returning current state')
 			return state
 	}
 }
@@ -93,9 +106,22 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
 				
 				const data = await res.json()
 				console.log('Start successful, data:', data)
+				console.log('About to dispatch INIT with payload:', data)
 				
-				if (!active) return
+				if (!active) {
+					console.log('Component no longer active, skipping dispatch')
+					return
+				}
+				
+				if (!data.cancellationId) {
+					console.error('CRITICAL: Start API returned no cancellationId!', data)
+					setError('Failed to initialize cancellation flow')
+					return
+				}
+				
+				console.log('Dispatching INIT action')
 				dispatch({ type: 'INIT', payload: data })
+				console.log('INIT dispatch completed')
 			} catch (e: any) {
 				console.error('Start error:', e)
 				setError(e.message)
@@ -110,17 +136,28 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
 	}, [subscriptionId])
 
 	async function save(data: Record<string, unknown>) {
+		console.log('=== SAVE FUNCTION START ===')
 		console.log('Current state:', state)
+		console.log('Data to save:', data)
+		
 		if (!state.cancellationId) {
-			console.warn('No cancellation ID available, skipping save')
-			return
+			console.error('CRITICAL: No cancellation ID available, cannot save!')
+			console.log('Full state details:', state)
+			console.log('This suggests the /start API call failed or didn\'t complete properly')
+			throw new Error('No cancellation ID available - start flow may have failed')
 		}
+		
 		setError(null)
 		const csrf = getCookie('csrf_token_mirror') || ''
 		
-		console.log('Saving data:', { data, cancellationId: state.cancellationId, csrf: csrf ? 'present' : 'missing' })
+		console.log('Saving data:', { 
+			data, 
+			cancellationId: state.cancellationId, 
+			csrf: csrf ? 'present' : 'missing',
+			csrfLength: csrf ? csrf.length : 0
+		})
 		
-		const res = await fetch(`/api/cancellations/${state.cancellationId}`, {
+		const requestPayload = {
 			method: 'PATCH',
 			headers: {
 				'content-type': 'application/json',
@@ -128,15 +165,40 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
 				'x-user-id': '550e8400-e29b-41d4-a716-446655440001',
 			},
 			body: JSON.stringify(data),
-		})
-		
-		if (!res.ok) {
-			const errorText = await res.text()
-			console.error('Save failed:', { status: res.status, statusText: res.statusText, body: errorText })
-			throw new Error(`Failed to save: ${res.status} ${res.statusText}`)
 		}
 		
-		console.log('Save successful')
+		console.log('Request payload:', requestPayload)
+		console.log('Request URL:', `/api/cancellations/${state.cancellationId}`)
+		
+		try {
+			const res = await fetch(`/api/cancellations/${state.cancellationId}`, requestPayload)
+			
+			console.log('Response received:', { 
+				status: res.status, 
+				statusText: res.statusText,
+				ok: res.ok,
+				headers: Object.fromEntries(res.headers.entries())
+			})
+			
+			if (!res.ok) {
+				const errorText = await res.text()
+				console.error('Save failed:', { 
+					status: res.status, 
+					statusText: res.statusText, 
+					body: errorText,
+					url: `/api/cancellations/${state.cancellationId}`
+				})
+				throw new Error(`Failed to save: ${res.status} ${res.statusText}`)
+			}
+			
+			const responseData = await res.text()
+			console.log('Save successful, response:', responseData)
+			console.log('=== SAVE FUNCTION END (SUCCESS) ===')
+		} catch (fetchError) {
+			console.error('Fetch error:', fetchError)
+			console.log('=== SAVE FUNCTION END (ERROR) ===')
+			throw fetchError
+		}
 	}
 
 	async function complete() {
@@ -361,13 +423,24 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
 									<div className="flex flex-col">
 										<J2Feedback
 											foundViaUs={!!state.found_via_migratemate}
-											onNext={async ({ visa, freeform }) => {
+											onNext={async ({ freeform }) => {
+												console.log('=== J2 ONNEXT START ===')
+												console.log('J2 onNext called with:', { freeform })
+												console.log('Current state in J2 onNext:', state)
+												console.log('State keys:', Object.keys(state))
+												console.log('CancellationId exists:', !!state.cancellationId)
+												console.log('CancellationId value:', state.cancellationId)
 												try {
-													await save({ visa_type: visa ?? null, freeform_feedback: freeform ?? null })
+													const saveData = { freeform_feedback: freeform ?? null }
+													console.log('About to save:', saveData)
+													await save(saveData)
+													console.log('Save successful, moving to J3')
 													dispatch({ type: 'GO', step: 'J3' })
 												} catch (err) {
-													console.error('Save error:', err)
+													console.error('Save error in J2:', err)
+													console.error('Error details:', { message: err?.message, stack: err?.stack })
 													// Continue to next step even if save fails
+													console.log('Continuing to J3 despite save error')
 													dispatch({ type: 'GO', step: 'J3' })
 												}
 											}}
@@ -401,12 +474,159 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
 				)
 			case 'J3':
 				return (
-					<J3Done
-						onFinish={async () => {
-							await complete()
-							onClose()
-						}}
-					/>
+					<div className="mx-auto w-full max-w-[1040px]">
+						<div className="rounded-2xl bg-white shadow-xl ring-1 ring-black/5">
+							<div className="p-4 md:p-6">
+								{/* Header bar */}
+								<div className="flex items-center justify-between h-12 px-2 md:px-2 border-b border-gray-200">
+									{/* Left: Back button */}
+									<button
+										onClick={() => dispatch({ type: 'GO', step: 'J2' })}
+										className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900"
+									>
+										<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+										</svg>
+										Back
+									</button>
+									
+									{/* Center: title + step + dots */}
+									<div className="flex items-center">
+										<span className="text-sm font-medium text-gray-900">Subscription Cancellation</span>
+										<span className="ml-2 text-sm text-gray-500">Step 3 of 3</span>
+										<div className="ml-3 flex items-center gap-1">
+											<div className="h-2.5 w-2.5 rounded-full bg-blue-500"></div>
+											<div className="h-2.5 w-2.5 rounded-full bg-blue-500"></div>
+											<div className="h-2.5 w-2.5 rounded-full bg-blue-500"></div>
+										</div>
+									</div>
+									
+									{/* Right: Close button */}
+									<button
+										onClick={onClose}
+										className="text-gray-600 hover:text-gray-900"
+										aria-label="Close"
+									>
+										<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+										</svg>
+									</button>
+								</div>
+								
+								{/* Content grid */}
+								<div className="mt-6 grid md:grid-cols-[minmax(0,1fr)_minmax(0,480px)] gap-6 md:gap-8 items-start">
+									{/* Left column (form) */}
+									<div className="flex flex-col">
+										<J3Done
+											onFinish={async (visaData) => {
+												try {
+													await save({
+														employer_immigration_support: visaData.employer_immigration_support,
+														visa_type: visaData.visa_type
+													})
+													await complete()
+													dispatch({ type: 'GO', step: 'COMPLETED' })
+												} catch (err) {
+													console.error('Complete error:', err)
+													// Go to completion anyway for graceful fallback
+													dispatch({ type: 'GO', step: 'COMPLETED' })
+												}
+											}}
+											onBack={() => dispatch({ type: 'GO', step: 'J2' })}
+										/>
+									</div>
+									
+									{/* Right column (image) - hidden on mobile */}
+									<div className="hidden md:block">
+										<img 
+											src="/images/empire-state-compressed.jpg" 
+											alt="City skyline" 
+											className="w-full h-[320px] md:h-[360px] object-cover rounded-2xl"
+											onError={(e) => console.error('Image failed to load:', e)} 
+										/>
+									</div>
+									
+									{/* Mobile image - shown on mobile, hidden on desktop */}
+									<div className="block md:hidden">
+										<img 
+											src="/images/empire-state-compressed.jpg" 
+											alt="City skyline" 
+											className="w-full h-[320px] object-cover rounded-2xl"
+											onError={(e) => console.error('Image failed to load:', e)} 
+										/>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				)
+			case 'COMPLETED':
+				return (
+					<div className="mx-auto w-full max-w-[1040px]">
+						<div className="rounded-2xl bg-white shadow-xl ring-1 ring-black/5">
+							<div className="p-4 md:p-6">
+								{/* Header bar */}
+								<div className="flex items-center justify-between py-4 px-6 border-b border-gray-100">
+									{/* Left: Empty to keep layout balanced */}
+									<div></div>
+									
+									{/* Center: title + completion status */}
+									<div className="flex items-center gap-4">
+										<span className="text-base font-semibold text-gray-900 tracking-wide">Subscription Cancelled</span>
+										<div className="flex items-center gap-3">
+											<span className="text-sm font-medium text-gray-500 tracking-wide">Completed</span>
+											<div className="flex items-center gap-2">
+												<div className="h-2.5 w-2.5 rounded-full bg-blue-500 shadow-sm"></div>
+												<div className="h-2.5 w-2.5 rounded-full bg-blue-500 shadow-sm"></div>
+												<div className="h-2.5 w-2.5 rounded-full bg-blue-500 shadow-sm"></div>
+											</div>
+										</div>
+									</div>
+									
+									{/* Right: Close button */}
+									<button
+										onClick={onClose}
+										className="text-gray-400 hover:text-gray-600 transition-colors p-1"
+										aria-label="Close"
+									>
+										<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+										</svg>
+									</button>
+								</div>
+								
+								{/* Content grid */}
+								<div className="mt-6 grid md:grid-cols-[minmax(0,1fr)_minmax(0,480px)] gap-6 md:gap-8 items-start">
+									{/* Left column (content) */}
+									<div className="flex flex-col">
+										<CompletionModal
+											onFinish={onClose}
+										/>
+									</div>
+									
+									{/* Right column (image) - hidden on mobile */}
+									<div className="hidden md:block">
+										<img 
+											src="/images/empire-state-compressed.jpg" 
+											alt="City skyline" 
+											className="w-full h-[260px] md:h-[300px] object-cover rounded-2xl shadow-[inset_0_0_0_1px_rgba(0,0,0,0.04)]"
+											onError={(e) => console.error('Image failed to load:', e)} 
+										/>
+									</div>
+									
+									{/* Mobile image - shown on mobile, hidden on desktop */}
+									<div className="block md:hidden">
+										<img 
+											src="/images/empire-state-compressed.jpg" 
+											alt="City skyline" 
+											className="w-full h-[260px] object-cover rounded-2xl"
+											onError={(e) => console.error('Image failed to load:', e)} 
+										/>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
 				)
 		}
 	})()
@@ -437,7 +657,9 @@ function totalSteps(state: CancelState): number {
 function getCookie(name: string): string | null {
 	if (typeof document === 'undefined') return null
 	const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-	return match ? decodeURIComponent(match[2]) : null
+	const result = match ? decodeURIComponent(match[2]) : null
+	console.log(`getCookie(${name}):`, result ? `found (${result.length} chars)` : 'not found')
+	return result
 }
 
 

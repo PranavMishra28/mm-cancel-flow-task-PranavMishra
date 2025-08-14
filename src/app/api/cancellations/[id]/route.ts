@@ -51,6 +51,7 @@ export async function PATCH(
 		if (parsed.freeform_feedback !== undefined)
 			update.freeform_feedback = parsed.freeform_feedback
 		if (parsed.reason_key !== undefined) update.reason_key = parsed.reason_key
+		if (parsed.employer_immigration_support !== undefined) update.employer_immigration_support = parsed.employer_immigration_support
 		if (willingToPayCents !== undefined) update.willing_to_pay_cents = willingToPayCents
 
 		if (supabaseAdmin) {
