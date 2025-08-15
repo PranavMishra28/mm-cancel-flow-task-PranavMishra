@@ -16,10 +16,13 @@ import CompletionModal from './steps/CompletionModal'
 import StillLookingOffer from './steps/StillLooking_Offer'
 import StillLookingOfferAccepted from './steps/StillLooking_OfferAccepted'
 import StillLookingRolesPreview from './steps/StillLooking_RolesPreview'
+import StillLookingUsageSurvey from './steps/StillLooking_UsageSurvey'
+import StillLookingReasons from './steps/StillLooking_Reasons'
+import CancelCompletedGeneric from './steps/CancelCompleted_Generic'
 import Modal from '@/components/Modal'
 
 type Variant = 'A' | 'B'
-type StepId = 'S0' | 'J1' | 'J2' | 'J3' | 'J3_LAWYER_YES' | 'YES_COMPLETION_VISA_HELP' | 'D1' | 'N1' | 'N2' | 'N3' | 'COMPLETED' | 'STILL_LOOKING_OFFER' | 'STILL_LOOKING_OFFER_ACCEPTED' | 'STILL_LOOKING_ROLES_PREVIEW'
+type StepId = 'S0' | 'J1' | 'J2' | 'J3' | 'J3_LAWYER_YES' | 'YES_COMPLETION_VISA_HELP' | 'D1' | 'N1' | 'N2' | 'N3' | 'COMPLETED' | 'STILL_LOOKING_OFFER' | 'STILL_LOOKING_OFFER_ACCEPTED' | 'STILL_LOOKING_ROLES_PREVIEW' | 'STILL_LOOKING_USAGE_SURVEY' | 'STILL_LOOKING_REASONS' | 'CANCEL_COMPLETED_GENERIC'
 
 type CancelState = {
 	step: StepId
@@ -676,10 +679,9 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
 							dispatch({ type: 'GO', step: 'STILL_LOOKING_OFFER_ACCEPTED' })
 						}}
 						onDecline={async () => {
-							// TODO: Implement "No thanks" logic later
-							// For now, just save that they declined
+							// Save that they declined the offer and proceed to usage survey
 							await save({ downsell_offered: true, downsell_accepted: false })
-							// Could route to existing N1 flow or close
+							dispatch({ type: 'GO', step: 'STILL_LOOKING_USAGE_SURVEY' })
 						}}
 						onBack={() => dispatch({ type: 'GO', step: 'S0' })}
 						onClose={onClose}
@@ -695,10 +697,46 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
 						onClose={onClose}
 					/>
 				)
+			case 'STILL_LOOKING_USAGE_SURVEY':
+				return (
+					<StillLookingUsageSurvey
+						onBack={() => dispatch({ type: 'GO', step: 'STILL_LOOKING_OFFER' })}
+						onClose={onClose}
+						onAcceptOffer={() => {
+							dispatch({ type: 'GO', step: 'STILL_LOOKING_OFFER_ACCEPTED' })
+						}}
+						onContinue={() => {
+							dispatch({ type: 'GO', step: 'STILL_LOOKING_REASONS' })
+						}}
+					/>
+				)
 			case 'STILL_LOOKING_ROLES_PREVIEW':
 				return (
 					<StillLookingRolesPreview
 						onClose={onClose}
+					/>
+				)
+			case 'STILL_LOOKING_REASONS':
+				return (
+					<StillLookingReasons
+						onBack={() => dispatch({ type: 'GO', step: 'STILL_LOOKING_USAGE_SURVEY' })}
+						onClose={onClose}
+						onAcceptOffer={() => {
+							dispatch({ type: 'GO', step: 'STILL_LOOKING_OFFER_ACCEPTED' })
+						}}
+						onComplete={async () => {
+							// Complete the cancellation process
+							await complete()
+							dispatch({ type: 'GO', step: 'CANCEL_COMPLETED_GENERIC' })
+						}}
+					/>
+				)
+			case 'CANCEL_COMPLETED_GENERIC':
+				return (
+					<CancelCompletedGeneric
+						onBack={() => dispatch({ type: 'GO', step: 'STILL_LOOKING_REASONS' })}
+						onClose={onClose}
+						onGoToJobs={onClose} // Close modal and let parent handle navigation to jobs
 					/>
 				)
 			case 'COMPLETED':
