@@ -296,14 +296,35 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
 			
 			if (!res.ok) {
 				const errorText = await res.text()
-				console.error('Complete API failed:', { status: res.status, body: errorText })
+				console.log('Complete API returned non-ok status:', { status: res.status, body: errorText })
 				console.log('Complete API failed, but continuing gracefully for better UX')
 				return // Don't throw - just return to allow flow to continue
 			}
 			
 			console.log('Complete API successful')
 		} catch (error) {
-			console.error('Complete function error:', error)
+			// Better error logging that handles different error types
+			console.log('Complete failed - network or fetch error occurred')
+			console.log('Error details:', {
+				message: error?.message || 'No error message',
+				name: error?.name || 'Unknown error type',
+				stack: error?.stack || 'No stack trace available',
+				type: typeof error,
+				toString: error?.toString?.() || 'Cannot convert to string',
+				cancellationId: state.cancellationId,
+				url: `/api/cancellations/${state.cancellationId}/complete`,
+				isNetworkError: error?.name === 'TypeError' && error?.message?.includes('fetch')
+			})
+			
+			// Try to get more specific error info
+			if (error instanceof TypeError) {
+				console.log('Network error - likely connection issue or CORS problem')
+			} else if (error instanceof Error) {
+				console.log('Standard error:', error.message)
+			} else {
+				console.log('Unknown error type:', error)
+			}
+			
 			console.log('Complete function failed, but continuing gracefully for better UX')
 			// Don't throw - just return to allow flow to continue
 		}
@@ -326,7 +347,8 @@ export function CancelModal({ subscriptionId, onClose }: { subscriptionId: strin
                 return (
                     <div className="rounded-2xl bg-white shadow-xl overflow-hidden max-w-4xl w-full">
                         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                            <p className="text-sm text-gray-600 font-medium">{CONTENT.title.cancel}</p>
+                            <div className="w-6"></div>
+                            <p className="text-sm text-gray-600 font-semibold">{CONTENT.title.cancel}</p>
                             <button aria-label="Close" className="text-gray-400 hover:text-gray-600 text-xl leading-none" onClick={onClose}>×</button>
                         </div>
                         <div className="grid md:grid-cols-2 overflow-hidden min-h-[400px]">
